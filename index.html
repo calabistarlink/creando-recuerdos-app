@@ -2111,8 +2111,13 @@ function openLightbox(src) {
 }
 
 /* ---------- versiones ---------- */
-const APP_VERSION = '0.1.0';
+const APP_VERSION = '0.1.1';
 const NEWS = [
+  ['local 0.1.1', [
+    'Mis IAs explica mejor: tu suscripción (ChatGPT Plus, Claude Pro, Google AI Pro) se usa con "Enviar el pedido a tu app de IA". La clave de API es otra cosa: un servicio aparte que se paga por uso.',
+    'Si lo que pegas no parece una clave de API (por ejemplo, una contraseña), la app no lo envía a ninguna parte y te explica qué hacer.',
+    'Al guardar una clave de API, la app prueba que de verdad responde y te avisa de inmediato si la cuenta no tiene saldo.'
+  ]],
   ['local 0.1.0', [
     'Versión que vive solo en tu teléfono: se instala desde el navegador, funciona sin internet y no usa servidores.',
     'Mis IAs: marca qué IAs tienes (ChatGPT, Claude, Gemini) y elige cómo quieres que la app las use.',
@@ -2156,10 +2161,18 @@ const AIS = {
   claude: { name: 'Claude', url: q => `https://claude.ai/new?q=${encodeURIComponent(q)}` },
   gemini: { name: 'Gemini', url: () => 'https://gemini.google.com/app' }
 };
+/* La clave de API es un servicio aparte de la suscripción de chat (Plus, Pro…): `looks` filtra lo que claramente
+   no es una clave (por ejemplo, una contraseña) para no enviarlo a ninguna parte. */
 const KEY_AI = {
-  gemini: { name: 'Gemini (Google)', help: 'https://aistudio.google.com/apikey', note: 'Tiene un nivel gratis con límites diarios. La clave se saca con tu misma cuenta de Google.' },
-  claude: { name: 'Claude (Anthropic)', help: 'https://console.anthropic.com/settings/keys', note: 'Pagas por uso, aparte de Claude Pro: un itinerario cuesta unos pocos centavos de dólar.' },
-  openai: { name: 'ChatGPT (OpenAI)', help: 'https://platform.openai.com/api-keys', note: 'Pagas por uso, aparte de ChatGPT Plus: un itinerario cuesta unos pocos centavos de dólar.' }
+  gemini: { name: 'Gemini (Google)', company: 'Google', plan: 'Google AI Pro', billing: 'aistudio.google.com', shape: 'un código largo que se crea en Google AI Studio',
+    looks: k => /^[A-Za-z0-9._-]{30,}$/.test(k), help: 'https://aistudio.google.com/apikey',
+    note: 'Es distinta de Google AI Pro. Tiene un nivel gratis con límites diarios y se crea con tu misma cuenta de Google.' },
+  claude: { name: 'Claude (Anthropic)', company: 'Anthropic', plan: 'Claude Pro', billing: 'console.anthropic.com (Billing)', shape: 'un código largo que empieza con sk-ant-',
+    looks: k => /^sk-ant-[A-Za-z0-9_-]{20,}$/.test(k), help: 'https://console.anthropic.com/settings/keys',
+    note: 'Es distinta de Claude Pro: se paga aparte, por uso, cargando saldo en console.anthropic.com. Un itinerario cuesta unos pocos centavos de dólar.' },
+  openai: { name: 'ChatGPT (OpenAI)', company: 'OpenAI', plan: 'ChatGPT Plus', billing: 'platform.openai.com (Billing)', shape: 'un código largo que empieza con sk-',
+    looks: k => /^sk-[A-Za-z0-9_-]{20,}$/.test(k), help: 'https://platform.openai.com/api-keys',
+    note: 'Es distinta de ChatGPT Plus: se paga aparte, por uso, cargando saldo en platform.openai.com. Un itinerario cuesta unos pocos centavos de dólar.' }
 };
 /* Si la lista de modelos de la clave no trae uno conocido, se usan estos */
 const MODEL_FALLBACK = {
@@ -2176,7 +2189,7 @@ function relayApps() {
   return IAS.app && list.includes(IAS.app) ? [IAS.app, ...list.filter(k => k !== IAS.app)] : list;
 }
 function iasStatus() {
-  if (IAS.mode === 'key' && IAS.keys[IAS.keyAI]) return `${KEY_AI[IAS.keyAI].name}, con tu clave`;
+  if (IAS.mode === 'key' && IAS.keys[IAS.keyAI]) return `${KEY_AI[IAS.keyAI].name}, con tu clave de API`;
   const names = relayApps().map(k => AIS[k].name);
   return 'tu app de ' + (names.length <= 1 ? names[0] : names.slice(0, -1).join(', ') + ' o ' + names[names.length - 1]);
 }
@@ -2211,14 +2224,11 @@ const anthropicHeaders = key => ({ 'x-api-key': key, 'anthropic-version': '2023-
 async function apiJSON(r) {
   let j = null; try { j = await r.json(); } catch {}
   if (r.ok && j) return j;
-  const msg = JSON.stringify((j && j.error) || j || '').toLowerCase();
-  if (r.status === 401 || r.status === 403 || (r.status === 400 && /api[ _-]?key/.test(msg))) throw { code: 'bad_key' };
-  if (r.status === 402 || /credit|quota|billing|balance/.test(msg)) throw { code: 'no_credit' };
-  if (r.status === 404) throw { code: 'model_gone' };
-  if (r.status === 413) throw { code: 'prompt_too_large' };
-  if (r.status === 429) throw { code: 'rate_limited' };
-  if (r.status >= 500) throw { code: 'overloaded' };
-  throw { code: 'network' };
+  const msg = JSON.stringify((j && j.error) || j || '').toLowerCase(), s = r.status;
+  const code = s === 401 || s === 403 || (s === 400 && /api[ _-]?key/.test(msg)) ? 'bad_key'
+    : s === 402 || /credit|quota|billing|balance/.test(msg) ? 'no_credit'
+    : s === 404 ? 'model_gone' : s === 413 ? 'prompt_too_large' : s === 429 ? 'rate_limited' : s >= 500 ? 'overloaded' : 'network';
+  throw { code, status: s };
 }
 const verOf = id => Number((String(id).match(/(\d+(?:\.\d+)?)/) || [0, 0])[1]);
 /* Elige el modelo más nuevo que la clave puede usar; así la app no queda atada a nombres que cambian */
@@ -2240,11 +2250,12 @@ async function pickModel(ai, key, quality, signal) {
   const re = q === 'mejor' ? /^gpt-\d+(\.\d+)?$/ : /^gpt-\d+(\.\d+)?-mini$/;
   return (j.data || []).map(m => m.id).filter(i => re.test(i)).sort((a, b) => verOf(b) - verOf(a))[0] || MODEL_FALLBACK.openai[q];
 }
-async function callKey(ai, model, key, msgs, signal) {
+/* `max` solo se usa para la prueba corta al guardar la clave */
+async function callKey(ai, model, key, msgs, signal, max) {
   const post = (url, headers, body) => fetch(url, { method: 'POST', signal, headers: Object.assign({ 'content-type': 'application/json' }, headers), body: JSON.stringify(body) }).then(apiJSON);
   if (ai === 'gemini') {
     const j = await post(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, { 'x-goog-api-key': key },
-      { contents: msgs.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] })), generationConfig: { responseMimeType: 'application/json', maxOutputTokens: 16384 } });
+      { contents: msgs.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] })), generationConfig: { responseMimeType: 'application/json', maxOutputTokens: max || 16384 } });
     const c = j.candidates && j.candidates[0];
     if (!c) throw { code: j.promptFeedback ? 'refused' : 'empty_completion' };
     if (c.finishReason === 'MAX_TOKENS') throw { code: 'invalid_json' };
@@ -2252,12 +2263,12 @@ async function callKey(ai, model, key, msgs, signal) {
     return ((c.content && c.content.parts) || []).map(p => p.text || '').join('');
   }
   if (ai === 'claude') {
-    const j = await post('https://api.anthropic.com/v1/messages', anthropicHeaders(key), { model, max_tokens: 12000, messages: msgs });
+    const j = await post('https://api.anthropic.com/v1/messages', anthropicHeaders(key), { model, max_tokens: max || 12000, messages: msgs });
     if (j.stop_reason === 'refusal') throw { code: 'refused' };
     if (j.stop_reason === 'max_tokens') throw { code: 'invalid_json' };
     return (j.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
   }
-  const j = await post('https://api.openai.com/v1/chat/completions', { authorization: 'Bearer ' + key }, { model, messages: msgs });
+  const j = await post('https://api.openai.com/v1/chat/completions', { authorization: 'Bearer ' + key }, Object.assign({ model, messages: msgs }, max ? { max_completion_tokens: max } : {}));
   const c = j.choices && j.choices[0];
   if (!c) throw { code: 'empty_completion' };
   if (c.message && c.message.refusal) throw { code: 'refused' };
@@ -2347,13 +2358,13 @@ function iasForm() {
     <div class="f2">
       <div class="field full"><span class="flabel">¿Qué IAs tienes?</span><div class="chips">${Object.entries(AIS).map(([k, a]) => `<label class="chip"><input type="checkbox" data-has="${k}" ${IAS.has[k] ? 'checked' : ''}><span>${a.name}</span></label>`).join('')}</div><span class="hint">De pago o gratis, da lo mismo. La app te ofrecerá esas.</span></div>
       <fieldset class="modes full"><legend class="flabel">¿Cómo quieres que la app las use?</legend>
-        <label class="mode"><input type="radio" name="ia-mode" value="app" ${IAS.mode !== 'key' ? 'checked' : ''}><span><strong>Enviar el pedido a tu app de IA</strong><span class="hint">Gratis: usa tu suscripción. La app arma el pedido; tú lo abres en tu IA y pegas la respuesta.</span></span></label>
-        <label class="mode"><input type="radio" name="ia-mode" value="key" ${IAS.mode === 'key' ? 'checked' : ''}><span><strong>Conectar con una clave</strong><span class="hint">Automático: la IA responde sola. Pagas por uso a la empresa de IA, aparte de tu suscripción (Gemini tiene un nivel gratis).</span></span></label>
-        <div class="mode off" aria-disabled="true"><input type="radio" disabled tabindex="-1"><span><strong>Entrar con ChatGPT</strong> <span class="pill">Pronto</span><span class="hint">Automático y con tu plan Plus o Pro, sin claves. Falta que OpenAI apruebe la app.</span></span></div>
+        <label class="mode"><input type="radio" name="ia-mode" value="app" ${IAS.mode !== 'key' ? 'checked' : ''}><span><strong>Enviar el pedido a tu app de IA</strong><span class="hint"><strong>Así usas tu suscripción</strong> (ChatGPT Plus, Claude Pro, Google AI Pro…) sin pagar nada extra. La app arma el pedido; tú lo abres en tu IA y pegas la respuesta.</span></span></label>
+        <label class="mode"><input type="radio" name="ia-mode" value="key" ${IAS.mode === 'key' ? 'checked' : ''}><span><strong>Conectar con una clave de API</strong><span class="hint">Automático: la IA responde sola. Pero <strong>no usa tu suscripción</strong>: es un servicio aparte que se paga por uso (Gemini tiene un nivel gratis). Para personas que ya tienen una clave de API.</span></span></label>
+        <div class="mode off" aria-disabled="true"><input type="radio" disabled tabindex="-1"><span><strong>Entrar con ChatGPT</strong> <span class="pill">Pronto</span><span class="hint">Automático y con tu plan Plus o Pro, sin claves. OpenAI todavía no lo abre para apps como esta; lo activaremos cuando lo permita.</span></span></div>
       </fieldset>
       <div class="keybox full" id="ia-keybox" hidden>
         <div class="field"><label for="ia-ai">Con qué IA</label><select id="ia-ai">${Object.entries(KEY_AI).map(([k, a]) => `<option value="${k}" ${IAS.keyAI === k ? 'selected' : ''}>${a.name}</option>`).join('')}</select><span class="hint" id="ia-note"></span></div>
-        <div class="field"><label for="ia-key">Tu clave</label><input id="ia-key" type="password" autocomplete="off" spellcheck="false"><span class="hint"><a id="ia-help" target="_blank" rel="noopener">Cómo sacar tu clave</a>. Se guarda cifrada en este teléfono y solo se usa para hablar directo con la IA.</span></div>
+        <div class="field"><label for="ia-key">Clave de API</label><input id="ia-key" type="password" autocomplete="off" spellcheck="false"><span class="hint"><strong>No es tu contraseña.</strong> Es <span id="ia-shape"></span>. <a id="ia-help" target="_blank" rel="noopener">Cómo crearla</a>. Se guarda cifrada en este teléfono y solo se usa para hablar directo con la IA.</span></div>
         <div class="field"><label for="ia-q">Calidad</label><select id="ia-q"><option value="mejor" ${IAS.quality !== 'economica' ? 'selected' : ''}>La mejor</option><option value="economica" ${IAS.quality === 'economica' ? 'selected' : ''}>Económica</option></select></div>
         <div class="row" id="ia-saved"></div>
       </div>
@@ -2365,6 +2376,7 @@ function iasForm() {
       const ai = $('#ia-ai', f).value, a = KEY_AI[ai];
       $('#ia-keybox', f).hidden = f.querySelector('[name="ia-mode"]:checked').value !== 'key';
       $('#ia-note', f).textContent = a.note;
+      $('#ia-shape', f).textContent = a.shape;
       $('#ia-help', f).href = a.help;
       $('#ia-key', f).placeholder = IAS.keys[ai] ? 'Ya tienes una clave guardada' : 'Pégala aquí';
       $('#ia-saved', f).innerHTML = IAS.keys[ai] ? `<span class="pill good">Clave guardada</span><button type="button" class="btn small danger" data-action="ia-key-del" data-ai="${ai}">Borrar clave</button>` : '';
@@ -2378,23 +2390,34 @@ async function iasSubmit(f) {
   err.hidden = true;
   const has = {}; f.querySelectorAll('[data-has]').forEach(c => { if (c.checked) has[c.dataset.has] = true; });
   const mode = f.querySelector('[name="ia-mode"]:checked').value;
-  const ai = $('#ia-ai', f).value, quality = $('#ia-q', f).value, typed = $('#ia-key', f).value.trim();
+  const ai = $('#ia-ai', f).value, quality = $('#ia-q', f).value, typed = $('#ia-key', f).value.replace(/\s+/g, ''), a = KEY_AI[ai];
+  const useSub = `Para usar tu ${a.plan} sin pagar nada extra, elige "Enviar el pedido a tu app de IA".`;
   if (mode === 'key') {
-    if (!typed && !IAS.keys[ai]) return fail('Pega tu clave para conectar la IA, o elige enviar el pedido a tu app de IA.');
+    if (!typed && !IAS.keys[ai]) return fail(`Pega tu clave de API, o elige "Enviar el pedido a tu app de IA" para usar tu suscripción.`);
+    // Lo que no parece una clave (por ejemplo, una contraseña) no se envía a ninguna parte
+    if (typed && !a.looks(typed)) return fail(`Eso no parece una clave de API de ${a.company}: debería ser ${a.shape}. Ojo: no es tu contraseña de ${a.plan}. ${useSub}`);
     ok.disabled = true; ok.textContent = 'Probando la clave…';
     try {
-      const model = await pickModel(ai, typed || await readApiKey(ai), quality);
+      const k = typed || await readApiKey(ai);
+      let model;
+      try { model = await pickModel(ai, k, quality); }
+      catch (e) { if (e && e.status === 403) model = MODEL_FALLBACK[ai][quality === 'economica' ? 'economica' : 'mejor']; else throw e; }   // clave sin permiso para listar modelos
+      // Prueba corta de verdad: así el aviso de "sin saldo" sale ahora y no a mitad de un itinerario
+      try { await callKey(ai, model, k, [{ role: 'user', content: 'Responde solo: ok' }], undefined, 32); }
+      catch (e) { if (!(e && ['invalid_json', 'empty_completion', 'refused'].includes(e.code))) throw e; }
       if (typed) await storeApiKey(ai, typed);
       IAS.keys[ai] = true; IAS.models[ai] = model;
     } catch (e) {
-      return fail(e && e.code === 'bad_key' ? 'Esa clave no funciona. Revisa que la copiaste completa.'
-        : e && e.code === 'no_credit' ? 'La clave funciona, pero tu cuenta no tiene saldo o llegó a su límite.'
+      const c = e && e.code;
+      return fail(c === 'bad_key' ? `${a.company} no reconoció esa clave. Revisa que copiaste la clave de API completa (tu contraseña no sirve aquí).`
+        : c === 'no_credit' ? `La clave es correcta, pero tu cuenta de API de ${a.company} no tiene saldo${ai === 'gemini' ? ' o llegó al límite gratis de hoy' : ''}. Ojo: ${a.plan} no incluye saldo de API; se carga aparte en ${a.billing}. ${useSub}`
+        : c === 'rate_limited' ? `${a.company} dice que hay demasiadas consultas seguidas. Espera un minuto y vuelve a intentar.`
         : 'No pude probar la clave. Revisa tu conexión y vuelve a intentar.');
     }
   }
   Object.assign(IAS, { has, mode, keyAI: ai, quality });
   saveIAS(); closeModal(); render();
-  toast(mode === 'key' ? `Listo: la IA usará ${KEY_AI[ai].name} con tu clave.` : 'Listo: cuando pidas algo con IA, la app te dará el pedido para tu IA.');
+  toast(mode === 'key' ? `Listo: la IA usará ${a.name} con tu clave de API.` : 'Listo: cuando pidas algo con IA, la app te dará el pedido para tu IA.');
 }
 
 /* Respaldo en archivo: datos, fotos y elecciones de "Mis IAs". Las claves de IA no salen del teléfono. */

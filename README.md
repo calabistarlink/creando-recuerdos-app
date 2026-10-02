@@ -16,4 +16,4 @@ recuerdos con la gente que quieres.
 - **iPhone (Safari):** abre el enlace, toca **Compartir** y elige **Agregar a inicio**. En iPhone, instálala: si
   solo la abres en Safari, el navegador puede borrar los datos tras unos días sin uso.
 
-Versión de prueba `0.1.2`. Este repositorio solo publica la app; se desarrolla en un repositorio privado.
+Versión de prueba `0.1.3`. Este repositorio solo publica la app; se desarrolla en un repositorio privado.

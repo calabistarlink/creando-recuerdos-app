@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Creando Recuerdos</title>
 <meta name="description" content="Cuenta el tiempo que queda y llénalo de recuerdos con la gente que quieres. Vive solo en tu teléfono y usa tus propias IAs.">
-<meta name="theme-color" content="#EEF1F6" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#0B1120" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#F2F5EF" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0E1A14" media="(prefers-color-scheme: dark)">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png" type="image/png">
 <link rel="apple-touch-icon" href="icon-180.png">
@@ -15,13 +15,14 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Mono:wght@400;600&family=Atkinson+Hyperlegible+Next:ital,wght@0,400;0,600;0,700;0,800;1,400&family=Bodoni+Moda:ital,opsz,wght@0,6..96,500..800;1,6..96,500..800&display=swap">
 <style>
+/* Paleta "Jardín" (elegida por el usuario el 2026-10-01): verde bosque, durazno y fondo salvia; de noche, "Jardín de noche" */
 :root{
-  --bg:#EEF1F6; --surface:#FFFFFF; --surface-2:#F4F6FA; --ink:#141C33; --muted:#56617A; --faint:#8A93A8; --line:#D6DCE7;
-  --accent:#F0A202; --accent-ink:#8A5300; --accent-soft:#FCEFD0;
-  --lived:#C3CAD8; --left:#22305A;
-  --good:#1E7656; --good-soft:#DCF0E6; --warn:#B0432A; --warn-soft:#F7E0D8;
-  --c1:#F0A202; --c2:#22305A; --c3:#1E7656; --c4:#8D6FC0;
-  --scrim:rgba(10,14,28,.45);
+  --bg:#F2F5EF; --surface:#FFFFFF; --surface-2:#EAF0E6; --ink:#1F3A2E; --muted:#5B6B61; --faint:#93A39A; --line:#D7E0D2;
+  --accent:#F4A259; --accent-ink:#9A5A14; --accent-soft:#FDEBD8;
+  --lived:#D3DCCF; --left:#2F6B4F;
+  --good:#2F7D55; --good-soft:#DDF0E4; --warn:#B4532F; --warn-soft:#F7E2D8;
+  --c1:#F4A259; --c2:#2F6B4F; --c3:#5B9BD5; --c4:#B279A7;
+  --scrim:rgba(16,30,22,.45);
   --f-display:"Bodoni Moda","Bodoni 72",Didot,"Times New Roman",serif;
   --f-body:"Atkinson Hyperlegible Next","Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",sans-serif;
   --f-mono:"Atkinson Hyperlegible Mono",ui-monospace,"Cascadia Mono",Consolas,monospace;
@@ -30,21 +31,21 @@
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
     color-scheme:dark;
-    --bg:#0B1120; --surface:#131A2D; --surface-2:#19213A; --ink:#E8ECF5; --muted:#A3ACC2; --faint:#6F7994; --line:#29334C;
-    --accent:#FFB22E; --accent-ink:#FFC65C; --accent-soft:#35280F;
-    --lived:#2A3352; --left:#C9D2E6;
-    --good:#5CC49B; --good-soft:#123326; --warn:#F08A6C; --warn-soft:#3B1D15;
-    --c1:#FFB22E; --c2:#9FB4E8; --c3:#5CC49B; --c4:#B89BE6;
+    --bg:#0E1A14; --surface:#15241C; --surface-2:#1B2E24; --ink:#E6EFE8; --muted:#A7B8AD; --faint:#6F8577; --line:#2A3F33;
+    --accent:#F6B27A; --accent-ink:#FFC896; --accent-soft:#3A2A18;
+    --lived:#2A3D32; --left:#BFD8C8;
+    --good:#6CCB9B; --good-soft:#12301F; --warn:#F08A6C; --warn-soft:#3B1D15;
+    --c1:#F6B27A; --c2:#8CC7A5; --c3:#7FB6E6; --c4:#D3A1CB;
     --scrim:rgba(0,0,0,.6);
   }
 }
 :root[data-theme="dark"]{
   color-scheme:dark;
-  --bg:#0B1120; --surface:#131A2D; --surface-2:#19213A; --ink:#E8ECF5; --muted:#A3ACC2; --faint:#6F7994; --line:#29334C;
-  --accent:#FFB22E; --accent-ink:#FFC65C; --accent-soft:#35280F;
-  --lived:#2A3352; --left:#C9D2E6;
-  --good:#5CC49B; --good-soft:#123326; --warn:#F08A6C; --warn-soft:#3B1D15;
-  --c1:#FFB22E; --c2:#9FB4E8; --c3:#5CC49B; --c4:#B89BE6;
+  --bg:#0E1A14; --surface:#15241C; --surface-2:#1B2E24; --ink:#E6EFE8; --muted:#A7B8AD; --faint:#6F8577; --line:#2A3F33;
+  --accent:#F6B27A; --accent-ink:#FFC896; --accent-soft:#3A2A18;
+  --lived:#2A3D32; --left:#BFD8C8;
+  --good:#6CCB9B; --good-soft:#12301F; --warn:#F08A6C; --warn-soft:#3B1D15;
+  --c1:#F6B27A; --c2:#8CC7A5; --c3:#7FB6E6; --c4:#D3A1CB;
   --scrim:rgba(0,0,0,.6);
 }
 *{box-sizing:border-box}
@@ -2242,8 +2243,12 @@ function openLightbox(src) {
 }
 
 /* ---------- versiones ---------- */
-const APP_VERSION = '0.1.2';
+const APP_VERSION = '0.1.3';
 const NEWS = [
+  ['local 0.1.3', [
+    'Colores nuevos "Jardín": verde bosque, durazno y fondo salvia. Si tu teléfono está en modo oscuro, se ve en "Jardín de noche".',
+    'Ícono nuevo a juego: la ampolleta durazno sobre verde.'
+  ]],
   ['local 0.1.2', [
     'Viajes: nuevo "Sugiéreme a dónde ir". La IA propone destinos con qué hacer en cada uno, cómo llegar, el clima de esas fechas y el costo aproximado; con un toque arma el itinerario.',
     'Tiempo: junto al próximo fin de semana largo, "¿A dónde ir?" lleva directo a sugerencias para esas fechas.',

@@ -1,12 +1,12 @@
 // Genera los íconos de la app (PNG) sin dependencias: una ampolleta encendida colgando de un cable,
-// sobre azul tinta, como la guirnalda del contador. Uso: node local/tools/make-icons.mjs
+// sobre verde bosque (paleta "Jardín"), como la guirnalda del contador. Uso: node local/tools/make-icons.mjs
 import { writeFileSync } from 'node:fs';
 import { deflateSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 
 const OUT = fileURLToPath(new URL('..', import.meta.url));
 const hex = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
-const INK = hex('#141C33'), GOLD = hex('#F0A202'), LIGHT = hex('#FFD27A'), CAP = hex('#C3CAD8'), WIRE = hex('#56617A');
+const INK = hex('#1F3A2E'), GOLD = hex('#F4A259'), LIGHT = hex('#FFD9B0'), CAP = hex('#D3DCCF'), WIRE = hex('#93A39A');
 
 // Forma de la ampolleta (misma proporción que .bulb en el CSS: arriba 58 %, abajo 42 %)
 const B = { cx: 0.5, top: 0.40, w: 0.30, h: 0.40 };

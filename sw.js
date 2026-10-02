@@ -1,7 +1,7 @@
 /* Creando Recuerdos (versión local): deja la app disponible sin internet.
    Solo guarda los archivos de la app y las tipografías. Los datos del usuario no pasan por aquí:
    viven en localStorage e IndexedDB, y los pedidos a las IAs van directo, sin caché. */
-const VERSION = 'local-0.1.1';
+const VERSION = 'local-0.1.2';
 const APP = 'cr-app-' + VERSION;
 const FONTS = 'cr-fonts';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './icon-maskable-512.png', './icon-180.png'];

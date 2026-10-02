@@ -267,14 +267,15 @@ details.manual summary{cursor:pointer;font-weight:600}
 @media (min-width:920px){.trip{grid-template-columns:minmax(0,380px) minmax(0,1fr);align-items:start}}
 .tform{display:grid;gap:14px}
 .tform .pair{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-.itin{display:grid;gap:16px}
+.itin{display:grid;gap:16px;grid-template-columns:minmax(0,1fr)}
+.itin .pill{white-space:normal}
 .itin h2{font-family:var(--f-display);font-weight:600;font-size:34px;line-height:1.1;font-variation-settings:"opsz" 72}
 .itin .why{color:var(--muted);max-width:62ch}
 .bstack{display:flex;height:14px;border-radius:7px;overflow:hidden;background:var(--surface-2)}
 .bstack i{display:block;height:100%}
-.blegend{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px 16px;font-size:14px;margin-top:10px}
-.blegend div{display:flex;align-items:center;gap:8px}
-.blegend b{margin-left:auto;font-variant-numeric:tabular-nums}
+.blegend{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,170px),1fr));gap:6px 16px;font-size:14px;margin-top:10px}
+.blegend div{display:flex;align-items:center;gap:8px;min-width:0}
+.blegend b{margin-left:auto;font-variant-numeric:tabular-nums;white-space:nowrap}
 .day{border-top:1px solid var(--line);padding-top:14px;display:grid;gap:10px}
 .day h3{font-size:19px;font-weight:700}
 .day h3 .label{margin-right:8px}
@@ -338,15 +339,7 @@ details.manual summary{cursor:pointer;font-weight:600}
 .top{flex-wrap:wrap}
 .top .row{gap:8px}
 @media (max-width:479px){.hello{display:none}}
-.modes{display:grid;gap:8px;border:0;padding:0;margin:0}
-.modes legend{padding:0;margin-bottom:6px}
-.mode{display:flex;gap:12px;align-items:flex-start;padding:12px 14px;border:1px solid var(--line);border-radius:12px;cursor:pointer}
-.mode input{width:20px;height:20px;margin-top:3px;accent-color:var(--ink);flex:none}
-.mode:has(input:checked){border-color:var(--ink);background:var(--surface-2)}
-.mode.off{opacity:.6;cursor:default}
-.mode .hint{display:block;font-size:14px;color:var(--muted);margin-top:2px}
-.keybox{display:grid;gap:14px;padding:14px;border-radius:12px;background:var(--surface-2)}
-.keybox a{color:var(--accent-ink);font-weight:600;text-underline-offset:3px}
+.keybox{display:grid;gap:6px;padding:14px;border-radius:12px;background:var(--surface-2)}
 .steps{margin:0;padding-left:22px;display:grid;gap:16px}
 .steps li::marker{font-weight:800}
 .steps .hint{font-size:14px;color:var(--muted);margin-top:6px}
@@ -396,7 +389,11 @@ const newId = () => 'x' + Date.now().toString(36) + Math.random().toString(36).s
 const listJoin = a => a.length <= 1 ? (a[0] || '') : a.slice(0, -1).join(', ') + ' y ' + a[a.length - 1];
 const str = v => typeof v === 'string' ? v.trim().slice(0, 1200) : (v == null ? '' : String(v).slice(0, 1200));
 const num = v => { const n = Number(v); return isFinite(n) && n >= 0 ? n : 0; };
-function money(n, c) { try { return new Intl.NumberFormat('es', {style:'currency', currency: c || 'USD', maximumFractionDigits: 0}).format(n || 0); } catch { return fmtN(n || 0) + ' ' + (c || ''); } }
+/* Montos con el formato del país donde vive (Chile: $1.100.000; España: 1100 €); otra moneda se ve con su sigla (US$1.200) */
+function money(n, c) {
+  const k = state && state.profile && state.profile.country, loc = k && k !== 'XX' && COUNTRY[k] ? 'es-' + k : 'es';
+  try { return new Intl.NumberFormat(loc, {style:'currency', currency: c || 'USD', maximumFractionDigits: 0}).format(n || 0); } catch { return fmtN(n || 0) + ' ' + (c || ''); }
+}
 const cur = () => (state.profile.currency || 'USD').toUpperCase();
 
 const TYPE_KEYS = ['salida','viaje','celebracion','unoauno','tradicion'];
@@ -438,6 +435,48 @@ const COUNTRIES = [
 const COUNTRY = Object.fromEntries(COUNTRIES.map(c => [c[0], { name: c[1], currency: c[2], hemi: c[3] }]));
 const countryName = p => p.country === 'XX' ? (p.countryName || '') : (COUNTRY[p.country] ? COUNTRY[p.country].name : '');
 const countryOptions = sel => `<option value="">Elige tu país</option>` + COUNTRIES.map(([k, n]) => `<option value="${k}" ${sel === k ? 'selected' : ''}>${n}</option>`).join('');
+/* Cambio aproximado por 1 USD. Solo sirve para que los ejemplos y los montos sugeridos queden en la moneda del
+   país (no para cuentas reales: cada persona anota sus montos en su moneda). */
+const USD_RATE = { USD:1, ARS:1300, BOB:6.9, CLP:950, COP:4000, CRC:510, CUP:120, EUR:0.9, GTQ:7.7, HNL:26, MXN:18, NIO:37, PEN:3.7, PYG:7500, DOP:62, UYU:40, VES:150 };
+const niceAmount = n => { if (!n) return 0; const p = Math.pow(10, Math.max(0, Math.floor(Math.log10(n)) - 1)); return Math.round(n / p) * p; };
+const convertAmount = (n, from, to) => (!n || from === to || !USD_RATE[from] || !USD_RATE[to]) ? n : niceAmount(n / USD_RATE[from] * USD_RATE[to]);
+/* Pasa todos los montos de un estado (perfil, planes, itinerarios) a otra moneda */
+function localizeMoney(st, to) {
+  const from = st.profile.currency || 'USD';
+  if (!to || from === to) return st;
+  const cv = n => convertAmount(num(n), from, to);
+  st.profile.budgetOuting = cv(st.profile.budgetOuting);
+  for (const p of st.plans) {
+    if (p.budget) p.budget = cv(p.budget);
+    const it = p.itinerary; if (!it) continue;
+    const pb = it.presupuesto || {};
+    for (const k of ['transporte', 'alojamiento', 'comidas', 'actividades', 'total']) if (pb[k]) pb[k] = cv(pb[k]);
+    pb.moneda = to;
+    (it.dias || []).forEach(d => { if (d.costoAprox) d.costoAprox = cv(d.costoAprox); });
+    if (it.req) { if (it.req.budget) it.req.budget = cv(it.req.budget); it.req.currency = to; }
+  }
+  st.profile.currency = to;
+  return st;
+}
+/* País probable según la zona horaria del teléfono (o el idioma), para mostrar el ejemplo en su moneda */
+const TZ_COUNTRY = { 'America/La_Paz':'BO', 'America/Santiago':'CL', 'America/Punta_Arenas':'CL', 'Pacific/Easter':'CL', 'America/Bogota':'CO',
+  'America/Costa_Rica':'CR', 'America/Havana':'CU', 'America/Guayaquil':'EC', 'Pacific/Galapagos':'EC', 'America/El_Salvador':'SV',
+  'Europe/Madrid':'ES', 'Atlantic/Canary':'ES', 'Africa/Ceuta':'ES', 'America/Guatemala':'GT', 'America/Tegucigalpa':'HN', 'America/Managua':'NI',
+  'America/Panama':'PA', 'America/Asuncion':'PY', 'America/Lima':'PE', 'America/Puerto_Rico':'PR', 'America/Santo_Domingo':'DO',
+  'America/Montevideo':'UY', 'America/Caracas':'VE', 'America/Buenos_Aires':'AR', 'America/New_York':'US', 'America/Chicago':'US',
+  'America/Denver':'US', 'America/Phoenix':'US', 'America/Los_Angeles':'US', 'America/Anchorage':'US', 'Pacific/Honolulu':'US', 'America/Detroit':'US' };
+const MX_TZ = ['Mexico_City', 'Cancun', 'Merida', 'Monterrey', 'Matamoros', 'Chihuahua', 'Ciudad_Juarez', 'Ojinaga', 'Mazatlan', 'Bahia_Banderas', 'Hermosillo', 'Tijuana'];
+function guessCountry() {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+    if (TZ_COUNTRY[tz]) return TZ_COUNTRY[tz];
+    if (/^America\/Argentina\//.test(tz)) return 'AR';
+    if (MX_TZ.includes(tz.replace('America/', ''))) return 'MX';
+    if (/^America\/(Indiana|Kentucky|North_Dakota)\//.test(tz) || /^America\/(Boise|Juneau|Sitka|Nome|Menominee)$/.test(tz)) return 'US';
+  } catch {}
+  const m = String(navigator.language || '').match(/-([a-z]{2})$/i);
+  return m && COUNTRY[m[1].toUpperCase()] && m[1].toUpperCase() !== 'XX' ? m[1].toUpperCase() : '';
+}
 
 /* feriados nacionales calculados con las reglas oficiales */
 function easter(Y) {
@@ -555,7 +594,7 @@ let state;
 const ui = { tab:'tiempo', unit:'navidad', agendaFilter:'todo', goalYear: today0().getFullYear(), tripForm:null, tripView:null };
 const S = { mode:'example', ready:false, profileRef:null, peopleCol:null, plansCol:null };
 const DBD = { profile: undefined, people: [], plans: [] };
-const AI = { fn: undefined, off: false, trip: {status:'idle'}, ideas: {status:'idle'}, hol: {status:'idle'}, refine: {status:'idle'} };
+const AI = { fn: undefined, off: false, trip: {status:'idle'}, ideas: {status:'idle'}, hol: {status:'idle'}, refine: {status:'idle'}, dest: {status:'idle'} };
 try { const u = localStorage.getItem('lqq-unit'); if (u) ui.unit = u; } catch {}
 
 function blankProfile() {
@@ -825,14 +864,24 @@ const use = n => (window.claude && typeof window.claude.use === 'function') ? wi
 const LOCAL_SAMPLE = { json: (input, opts) => aiJSON(input, opts) };
 function getSample() { AI.fn = LOCAL_SAMPLE; return Promise.resolve(LOCAL_SAMPLE); }
 
+/* El ejemplo se muestra en el país probable del teléfono (moneda, hemisferio y feriados) */
+function localExample() {
+  const st = exampleState(), c = ui.guess || 'CO';
+  Object.assign(st.profile, { country: c, hemisferio: COUNTRY[c].hemi });
+  return localizeMoney(st, COUNTRY[c].currency);
+}
+
 async function boot() {
   const h = (location.hash || '').slice(1);
   if (['tiempo','personas','agenda','viajes','metas'].includes(h)) ui.tab = h;
-  state = exampleState();
+  ui.guess = guessCountry();
+  state = localExample();
   S.mode = 'local'; loadLocal(); S.ready = true;
   render();
   getSample();
   try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch {}
+  idbStore('ajustes', 'readwrite', st => st.clear()).catch(() => {});   // borra claves de IA guardadas hasta la 0.1.1
+  saveIAS();
   if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 
@@ -941,12 +990,15 @@ function saveProfile() {
 async function startReal(birth, E, keep, country) {
   if (!S.ready) return;
   const ex = exampleState();
-  const c = COUNTRY[country];
+  const c = COUNTRY[country], money0 = c ? c.currency : 'USD';
   const extra = { birth, expectancy: E, country: country || '', countryName: '' };
-  if (c) { extra.hemisferio = c.hemi; if (!keep) extra.currency = c.currency; }
-  const profile = keep ? Object.assign(ex.profile, extra) : Object.assign(blankProfile(), extra);
+  if (c) extra.hemisferio = c.hemi;
+  // La moneda siempre es la del país; los montos de los ejemplos y el presupuesto sugerido se pasan a esa moneda
+  if (keep) localizeMoney(ex, money0);
+  const profile = keep ? Object.assign(ex.profile, extra) : localizeMoney({ profile: Object.assign(blankProfile(), extra), plans: [] }, money0).profile;
   const people = keep ? ex.people : [], plans = keep ? ex.plans : [];
   state = { example:false, profile, people, plans };
+  ui.tripForm = null; AI.dest = { status:'idle' };   // el formulario de viaje se rehace con la moneda del país
   render();
   toast('Listo. Ahora todo lo que cambies se guarda.');
   if (S.mode === 'db') {
@@ -980,7 +1032,7 @@ function renderBanner() {
     <form id="startform">
       <div class="field"><label for="st-birth">Fecha de nacimiento</label><input id="st-birth" type="date" required max="${fmtISO(today0())}"></div>
       <div class="field narrow"><label for="st-exp">Expectativa (años)</label><input id="st-exp" type="number" min="40" max="120" value="${DEFAULT_E}" inputmode="numeric"></div>
-      <div class="field"><label for="st-country">País donde vives</label><select id="st-country">${countryOptions('')}</select></div>
+      <div class="field"><label for="st-country">País donde vives</label><select id="st-country">${countryOptions(ui.guess || '')}</select></div>
       <label class="check"><input type="checkbox" id="st-keep"> Conservar los ejemplos para editarlos</label>
       <button class="btn primary" type="submit" ${S.ready ? '' : 'disabled'}>${S.ready ? 'Empezar' : 'Cargando…'}</button>
     </form>
@@ -1133,7 +1185,7 @@ function nextHTML(L) {
   ${pend ? `<p class="note"><span class="pill warn">${pend} por recordar</span> Ya pasaron: guarda qué se vivió. <button class="linkbtn" data-go="agenda">Ir a la agenda</button></p>` : ''}
   ${(() => { const n = state.plans.filter(p => planState(p, L.t) === 'confirmar').length; return n ? `<p class="note"><span class="pill warn">${n} ${n === 1 ? 'invitación' : 'invitaciones'} por confirmar</span> <button class="linkbtn" data-action="afilter-go" data-f="confirmar">Confirmar</button></p>` : ''; })()}
   ${(() => { const r = upcomingBirthdays(60)[0]; if (!r) return ''; const n = daysBetween(L.t, r.nb.date); return `<p class="note"><span class="pill acc">Cumpleaños</span> ${esc(r.x.name)}${r.nb.turns != null ? ` cumple ${r.nb.turns}` : ''} el ${esc(fmtDate(r.nb.date, { weekday:'long', day:'numeric', month:'long' }))}${n === 0 ? ', hoy' : n === 1 ? ', mañana' : `, en ${n} días`}. <button class="linkbtn" data-action="afilter-go" data-f="cumples">Ver cumpleaños</button></p>`; })()}
-  ${(() => { const o = state.profile.country ? nextLongWeekend() : null; if (!o) return ''; const r = o.bridge || o; return `<p class="note"><span class="pill good">${o.bridge ? 'Puente' : 'Fin de semana largo'}</span> ${esc(rangeText(r.start, r.end))}, ${o.bridge ? o.bridge.total : o.len} días${o.names.length ? ' · ' + esc(o.names[0]) : ''}. <button class="linkbtn" data-go="metas">Ver feriados</button></p>`; })()}
+  ${(() => { const o = state.profile.country ? nextLongWeekend() : null; if (!o) return ''; const r = o.bridge || o; return `<p class="note"><span class="pill good">${o.bridge ? 'Puente' : 'Fin de semana largo'}</span> ${esc(rangeText(r.start, r.end))}, ${o.bridge ? o.bridge.total : o.len} días${o.names.length ? ' · ' + esc(o.names[0]) : ''}. <button class="linkbtn" data-action="long-dest">✦ ¿A dónde ir?</button> · <button class="linkbtn" data-go="metas">Ver feriados</button></p>`; })()}
   <div class="plans mini" style="margin-top:8px">${up.length ? up.map(p => planRow(p, true)).join('') : `<p class="empty">No hay nada agendado. <button class="linkbtn" data-action="new-plan">Agenda algo</button></p>`}</div>`;
 }
 function barSegs(done, sched, over, goal) {
@@ -1381,7 +1433,7 @@ function tick() {
   if (tickTimer) return;
   tickTimer = setInterval(() => {
     const els = document.querySelectorAll('[data-elapsed]');
-    if (!els.length && ![AI.trip, AI.ideas, AI.hol, AI.refine].some(j => j.status === 'running')) { clearInterval(tickTimer); tickTimer = null; return; }
+    if (!els.length && ![AI.trip, AI.ideas, AI.hol, AI.refine, AI.dest].some(j => j.status === 'running')) { clearInterval(tickTimer); tickTimer = null; return; }
     els.forEach(el => el.textContent = Math.round((Date.now() - Number(el.dataset.elapsed)) / 1000) + ' s');
   }, 1000);
 }
@@ -1394,9 +1446,6 @@ function aiErr(e) {
     case 'refused': return 'La IA no respondió a esta solicitud. Cambia algún dato y prueba otra vez.';
     case 'invalid_json': case 'empty_completion': return 'La respuesta llegó incompleta. Prueba de nuevo o pide menos días.';
     case 'prompt_too_large': return 'Hay demasiado texto en las notas. Acórtalas y prueba otra vez.';
-    case 'bad_key': return 'Tu clave de IA no funciona. Revísala en Mis IAs.';
-    case 'no_credit': return 'Tu cuenta de IA no tiene saldo o llegó a su límite. Revísala, o en Mis IAs elige enviar el pedido a tu app de IA.';
-    case 'overloaded': return 'La IA está muy ocupada en este momento. Prueba de nuevo en un rato.';
     default: return 'Se cortó la conexión con la IA. Prueba de nuevo.';
   }
 }
@@ -1427,7 +1476,7 @@ Notas: ${f.notes || 'ninguna'}
 Reglas:
 - Itinerario realista: traslados posibles, descansos y nada imposible para las edades del grupo.
 - Cada día incluye un "momento para recordar": algo concreto y pequeño que deje huella (una foto que se repite, una carta, un ritual, una historia contada, un objeto).
-- Costos aproximados en ${f.currency}. Si el presupuesto no alcanza, dilo en "nota" y ajusta el plan.
+- Costos aproximados en ${f.currency}: todos los montos, incluido el costo de cada día, van en ${f.currency}. Si el presupuesto no alcanza, dilo en "nota" y ajusta el plan.
 - No inventes nombres de hoteles o restaurantes si no estás seguro de que existen; describe el tipo de lugar y la zona.
 - Si algún viajero tiene condiciones de salud o de movilidad, adapta todo el viaje a esa persona: destino y trayectos cortos, transporte y alojamiento accesibles (sin escaleras si usa silla de ruedas), descansos frecuentes, baños cerca, servicios médicos a mano. Si depende de oxígeno o tiene problemas del corazón, evita altura, calor extremo y esfuerzo, y avisa que volar con oxígeno requiere aprobación previa de la aerolínea. Si tiene Alzheimer o demencia, prefiere lugares tranquilos, rutinas estables, pocos cambios de hotel y horarios de día. Respeta horarios de diálisis o medicación. Si nadie tiene limitaciones, deja "cuidados" vacío.
 - En "opciones" sugiere 4 restaurantes y 4 panoramas alternativos (bares o pubs, miradores, mercados, música en vivo, espectáculos, algo para un día de lluvia) que encajen con el grupo y el presupuesto. Nombra solo lugares que existan y conozcas con seguridad; si no estás seguro, describe el tipo de lugar sin inventar un nombre.
@@ -1542,6 +1591,7 @@ async function runTrip(fresh) {
     AI.trip = (e && e.code === 'cancelled') ? { status:'idle' } : { status:'error', msg: aiErr(e) };
   }
   renderView();
+  if (AI.trip.status !== 'idle') { const s = $('#tripres'); if (s) s.scrollIntoView({ block: 'start' }); }   // en el teléfono queda bajo el formulario
 }
 function currentItin() {
   const trips = state.plans.filter(x => x.type === 'viaje' && x.itinerary);
@@ -1568,7 +1618,8 @@ function itinHTML(it, plan) {
   const parts = [['transporte','Transporte','--c1'],['alojamiento','Alojamiento','--c2'],['comidas','Comidas','--c3'],['actividades','Actividades','--c4']];
   const sum = parts.reduce((a, [k]) => a + (pb[k] || 0), 0);
   const total = pb.total || sum, budget = num(it.req && it.req.budget);
-  const fit = budget && total ? (total <= budget ? `<span class="pill good">Dentro del presupuesto de ${esc(money(budget, c))}</span>` : `<span class="pill warn">Se pasa por ${esc(money(total - budget, c))}</span>`) : '';
+  const sameCur = !(it.req && it.req.currency && pb.moneda && pb.moneda !== it.req.currency);   // no comparar montos en monedas distintas
+  const fit = budget && total && sameCur ? (total <= budget ? `<span class="pill good">Dentro del presupuesto de ${esc(money(budget, c))}</span>` : `<span class="pill warn">Se pasa por ${esc(money(total - budget, c))}</span>`) : '';
   const isEx = plan && state.example && String(plan.id).startsWith('ex-');
   const key = plan ? plan.id : 'draft', accepted = !!(plan && it.accepted);
   const status = (accepted ? '<span class="pill good">Itinerario aceptado</span>' : '<span class="pill acc">Borrador: puedes ajustarlo</span>') +
@@ -1592,10 +1643,13 @@ function itinHTML(it, plan) {
         <div class="row"><button class="btn ai" data-action="refine" data-t="${esc(key)}">✦ Ajustar con IA</button><button class="btn primary" data-action="accept-itin" data-t="${esc(key)}">Aceptar itinerario</button></div>
         ${(it.ajustes || []).length ? `<p class="small muted">Ajustes pedidos: ${esc(it.ajustes.join(' · '))}</p>` : ''}
       </div>`;
+  // Si la IA respondió en otra moneda que la pedida, se muestra tal cual (sería falso cambiarle la etiqueta) y se ofrece pasarla
+  const want = it.req && it.req.currency;
+  const curNote = !sameCur ? `<p class="note"><span class="pill warn">Moneda</span> La IA dio los costos en ${esc(pb.moneda)} y no en ${esc(want)}.${!accepted && !refining ? ` <button class="linkbtn" data-action="cur-fix" data-t="${esc(key)}" data-c="${esc(want)}">Pasarlos a ${esc(want)}</button>` : ''}</p>` : '';
   return `<div class="itin">
     <div class="tags">${isEx ? '<span class="pill">Ejemplo</span>' : ''}${status}<span class="pill">${(it.dias || []).length} días</span></div>
     <h2>${esc(it.destino)}</h2>
-    ${it.resumen ? `<p>${esc(it.resumen)}</p>` : ''}
+    ${it.resumen ? `<p>${esc(it.resumen)}</p>` : ''}${curNote}
     ${it.porQue ? `<p class="why">${esc(it.porQue)}</p>` : ''}
     <div>
       <div class="panel-head"><span class="label">Presupuesto estimado</span><span class="row"><strong>${esc(money(total, c))}</strong>${fit}</span></div>
@@ -1622,6 +1676,70 @@ function itinHTML(it, plan) {
       ${it.req && !AI.off && !accepted ? `<button class="btn quiet" data-action="trip-again">Empezar de nuevo con otra versión</button>` : ''}</div>
   </div>`;
 }
+/* ¿A dónde ir? La IA sugiere destinos con qué hacer en cada uno; al elegir uno, arma el itinerario */
+function destPrompt(f) {
+  const L = life(state.profile), p = state.profile;
+  const who = f.people.map(personById).filter(Boolean);
+  const travelers = [`- Yo (${L.age} años)`].concat(who.map(personLine)).join('\n');
+  return `Sugiere destinos para un viaje que deje recuerdos con personas que quiero. Escribe todo en español.
+
+Desde: ${f.origin || p.city || countryName(p) || 'no indicado'}
+País donde vivo: ${countryName(p) || 'no indicado'}
+Fecha de salida: ${f.date ? fmtDate(parseD(f.date), { day:'numeric', month:'long', year:'numeric' }) : 'flexible'}
+Duración: ${f.days} días
+Viajeros:
+${travelers}
+Intereses: ${f.interests || p.interests || 'no indicados'}
+Presupuesto total del grupo: ${f.budget ? f.budget + ' ' + f.currency : 'no indicado'}
+Ritmo: ${PACE[f.pace] || 'equilibrado'}
+Notas: ${f.notes || 'ninguna'}
+
+Reglas:
+- Sugiere 4 destinos distintos y alcanzables en esos días; al menos 2 a los que se llegue por tierra o con un vuelo corto desde el origen.
+- Ten en cuenta la temporada de esas fechas (clima, lluvias, temporada alta) y las edades y la salud del grupo; si alguien tiene limitaciones, elige destinos accesibles y trayectos cortos.
+- "costoAprox" es el costo total estimado del viaje para todo el grupo, como número en ${f.currency}. Si el presupuesto no alcanza para un destino, no lo sugieras.
+- En "queHacer" pon 3 actividades concretas que dejen un recuerdo.
+- Nombra solo lugares que existan y conozcas con seguridad.
+
+Responde solo con un arreglo JSON, sin texto adicional, así:
+[{"destino":"Ciudad, País","porQue":"por qué encaja con este grupo y estas fechas","comoLlegar":"medio de transporte y tiempo aproximado","clima":"cómo suele estar en esas fechas","costoAprox":0,"queHacer":["...","...","..."]}]`;
+}
+async function runDest(fresh) {
+  const sample = await getSample();
+  if (!sample || AI.dest.status === 'running') return;
+  const f = clone(ui.tripForm || (ui.tripForm = defaultTripForm()));
+  f.days = clamp(Math.round(num(f.days)) || 3, 1, 14);
+  f.currency = (f.currency || cur()).toUpperCase().slice(0, 3);
+  const ctl = new AbortController();
+  AI.dest = { status:'running', started: Date.now(), ctl };
+  renderView(); tick();
+  try {
+    const opts = { signal: ctl.signal }; if (fresh) opts.cache = false;
+    const r = await sample.json(destPrompt(f), opts);
+    const arr = (Array.isArray(r) ? r : (r && Array.isArray(r.destinos) ? r.destinos : [])).filter(o => o && typeof o === 'object' && o.destino).slice(0, 6);
+    if (!arr.length) throw { code: 'invalid_json' };
+    AI.dest = { status:'done', currency: f.currency, list: arr.map(o => ({
+      destino: str(o.destino).slice(0, 120), porQue: str(o.porQue), comoLlegar: str(o.comoLlegar), clima: str(o.clima), costo: num(o.costoAprox),
+      queHacer: (Array.isArray(o.queHacer) ? o.queHacer : []).map(str).filter(Boolean).slice(0, 4)
+    })) };
+  } catch (e) {
+    AI.dest = (e && e.code === 'cancelled') ? { status:'idle' } : { status:'error', msg: aiErr(e) };
+  }
+  renderView();
+  if (AI.dest.status !== 'idle') { const s = $('#destinos'); if (s) s.scrollIntoView({ block: 'start' }); }
+}
+function destHTML() {
+  const j = AI.dest; if (!j || j.status === 'idle') return '';
+  if (j.status === 'running') return `<section class="panel" id="destinos">${thinkingHTML('Buscando destinos', j.started, 'stop-dest', 'La IA está pensando en las fechas, quiénes van, sus intereses y tu presupuesto.')}</section>`;
+  if (j.status === 'error') return `<section class="panel" id="destinos"><h2>¿A dónde ir?</h2><p class="err" style="margin-top:10px">${esc(j.msg)}</p><div class="row" style="margin-top:12px"><button class="btn ai" data-action="dest-run" data-fresh="1">Intentar de nuevo</button><button class="btn quiet" data-action="dest-close">Cerrar</button></div></section>`;
+  return `<section class="panel" id="destinos"><div class="panel-head"><h2>¿A dónde ir?</h2><div class="row"><button class="btn small ai" data-action="dest-run" data-fresh="1">✦ Otras ideas</button><button class="btn small quiet" data-action="dest-close">Cerrar</button></div></div>
+    <div class="ideas">${j.list.map((o, i) => `<article class="idea"><h3>${esc(o.destino)}</h3>
+      ${o.porQue ? `<p>${esc(o.porQue)}</p>` : ''}
+      ${o.queHacer.length ? `<ul class="tips">${o.queHacer.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}
+      <p class="meta">${[o.comoLlegar, o.clima, o.costo ? 'Aprox. ' + money(o.costo, j.currency) + ' en total' : ''].filter(Boolean).map(esc).join(' · ')}</p>
+      <div class="row"><button class="btn small primary" data-action="dest-pick" data-i="${i}">✦ Armar itinerario aquí</button><a class="btn small" href="https://www.google.com/maps/search/?api=1&amp;query=${esc(encodeURIComponent(o.destino))}" target="_blank" rel="noopener">Ver en el mapa</a></div></article>`).join('')}</div>
+    <p class="note">Son sugerencias de la IA: revísalas en el mapa y compara precios antes de decidir.</p></section>`;
+}
 function viewViajes() {
   const f = ui.tripForm || (ui.tripForm = defaultTripForm());
   const job = AI.trip;
@@ -1634,7 +1752,13 @@ function viewViajes() {
   }
   const trips = state.plans.filter(x => x.type === 'viaje').sort(byDate);
   const ppl = state.people.map(x => `<label class="chip"><input type="checkbox" id="tf-p-${esc(x.id)}" data-tp="${esc(x.id)}" ${f.people.includes(x.id) ? 'checked' : ''}><span>${esc(x.name)}</span></label>`).join('');
+  const busy = job.status === 'running' || AI.dest.status === 'running';
   return `
+  <section class="panel"><h2 class="sec-h">¿A dónde vamos?</h2>
+    <p class="lede">La IA te sugiere destinos y qué hacer en cada uno, según las fechas, quiénes van, sus intereses y tu presupuesto en ${esc(f.currency || cur())}. Después arma el itinerario día por día.</p>
+    <div class="row" style="margin-top:12px"><button class="btn ai" data-action="dest-run" ${busy ? 'disabled' : ''}>✦ Sugiéreme a dónde ir</button><button class="btn ai" data-action="trip-go" ${busy ? 'disabled' : ''}>✦ Armar itinerario</button></div>
+    <p class="small muted" style="margin-top:8px">Fechas, quiénes van y presupuesto se ajustan abajo, en "Planear un viaje".</p></section>
+  ${destHTML()}
   <div class="trip">
     <form class="panel tform" id="tripform" novalidate>
       <div><h2 class="sec-h">Planear un viaje</h2><p class="lede">Cuéntale a la IA quién va y qué les gusta. Arma el itinerario según sus intereses y su presupuesto.</p></div>
@@ -1651,7 +1775,7 @@ function viewViajes() {
       <button class="btn ai" type="submit" ${AI.off || job.status === 'running' ? 'disabled' : ''}>✦ Armar itinerario con IA</button>
       ${AI.off ? '<p class="note">El planificador con IA funciona cuando abres esta app dentro de Claude.</p>' : ''}
     </form>
-    <section class="panel" aria-live="polite">${right}</section>
+    <section class="panel" id="tripres" aria-live="polite">${right}</section>
   </div>
   <section class="panel"><h2>Tus viajes</h2>
     <div class="plans" style="margin-top:6px">${trips.length ? trips.map(p => planRow(p)).join('') : '<p class="empty">Aún no hay viajes en tu agenda.</p>'}</div></section>`;
@@ -1990,6 +2114,8 @@ function profileForm() {
     if (!parseD(birth)) { err.textContent = 'Pon tu fecha de nacimiento.'; err.hidden = false; return; }
     let c = $('#pr-cur', f).value.trim().toUpperCase();
     try { new Intl.NumberFormat('es', { style:'currency', currency: c }); } catch { err.textContent = 'La moneda debe ser un código de 3 letras, como USD o MXN.'; err.hidden = false; return; }
+    const oldCur = cur();
+    if (ui.tripForm && ui.tripForm.currency === oldCur) ui.tripForm.currency = c;   // el viaje en preparación sigue a la moneda del perfil
     Object.assign(state.profile, { name: $('#pr-name', f).value.trim(), birth, expectancy: clamp(Math.round(num($('#pr-exp', f).value)) || DEFAULT_E, 40, 120),
       city: $('#pr-city', f).value.trim(), hemisferio: $('#pr-hemi', f).value, currency: c, budgetOuting: num($('#pr-bud', f).value), interests: $('#pr-int', f).value.trim(),
       country: $('#pr-country', f).value, countryName: $('#pr-country', f).value === 'XX' ? $('#pr-cname', f).value.trim() : '' });
@@ -2001,7 +2127,11 @@ function profileForm() {
       const c = COUNTRY[sel.value], cur = $('#pr-cur', f);
       $('#pr-cnwrap', f).hidden = sel.value !== 'XX';
       if (c && sel.value !== 'XX') {
-        if (!cur.value.trim() || cur.value.trim().toUpperCase() === 'USD' || (COUNTRY[prev] && cur.value.trim().toUpperCase() === COUNTRY[prev].currency)) cur.value = c.currency;
+        const was = cur.value.trim().toUpperCase();
+        if (!was || was === 'USD' || (COUNTRY[prev] && was === COUNTRY[prev].currency)) {
+          cur.value = c.currency;
+          const bud = $('#pr-bud', f); if (num(bud.value)) bud.value = convertAmount(num(bud.value), was || 'USD', c.currency);   // el presupuesto sugerido sigue a la moneda
+        }
         $('#pr-hemi', f).value = c.hemi;
       }
       prev = sel.value;
@@ -2017,7 +2147,8 @@ const MAX_PHOTOS = 3;
 const photoURLs = new Map();
 let assetsP = null;
 const getAssets = () => assetsP || (assetsP = use('assets'));
-/* Versión 2 de la base local: `fotos` (igual que antes) y `ajustes` (clave de cifrado y claves de IA cifradas). */
+/* Versión 2 de la base local: `fotos` (igual que antes) y `ajustes` (guardó claves de IA cifradas hasta la 0.1.1;
+   desde la 0.1.2 se vacía al arrancar y queda libre para ajustes futuros). */
 let idbP = null;
 function idbOpen() {
   return idbP || (idbP = new Promise((res, rej) => {
@@ -2111,8 +2242,14 @@ function openLightbox(src) {
 }
 
 /* ---------- versiones ---------- */
-const APP_VERSION = '0.1.1';
+const APP_VERSION = '0.1.2';
 const NEWS = [
+  ['local 0.1.2', [
+    'Viajes: nuevo "Sugiéreme a dónde ir". La IA propone destinos con qué hacer en cada uno, cómo llegar, el clima de esas fechas y el costo aproximado; con un toque arma el itinerario.',
+    'Tiempo: junto al próximo fin de semana largo, "¿A dónde ir?" lleva directo a sugerencias para esas fechas.',
+    'Moneda: todo queda en la moneda de tu país, desde el ejemplo (que ya aparece en tu país) hasta los presupuestos, el viaje y las ideas. Si la IA responde en otra moneda, la app te avisa y la corrige con un toque.',
+    'Mis IAs ya no pide claves: eliges qué IA usas más y la app te lleva a ella, donde ya tienes tu sesión. Las claves guardadas antes se borraron de este teléfono.'
+  ]],
   ['local 0.1.1', [
     'Mis IAs explica mejor: tu suscripción (ChatGPT Plus, Claude Pro, Google AI Pro) se usa con "Enviar el pedido a tu app de IA". La clave de API es otra cosa: un servicio aparte que se paga por uso.',
     'Si lo que pegas no parece una clave de API (por ejemplo, una contraseña), la app no lo envía a ninguna parte y te explica qué hacer.',
@@ -2151,130 +2288,27 @@ async function copyText(text) {
 }
 
 /* ---------- IA local: tus IAs, sin servidor ---------- */
-/* Cada pedido de IA sale por una de dos vías que el usuario elige en "Mis IAs":
-   "app": la app arma el pedido, el usuario lo abre en ChatGPT, Claude o Gemini y pega la respuesta (usa su suscripción).
-   "key": la app llama directo a la IA con la clave del usuario, que se guarda cifrada en este dispositivo.
-   Ninguna de las dos pasa por un servidor nuestro. */
+/* Cada pedido de IA lo lleva el usuario a su propia IA (ChatGPT, Claude o Gemini), donde ya tiene su sesión, y pega
+   la respuesta: usa su suscripción y la app nunca pide contraseñas ni claves. No pasa por ningún servidor nuestro.
+   (La vía con clave de API existió hasta local-v0.1.1; el usuario decidió el 2026-10-01 que la app no la pida.) */
 const IAS_LS = 'cr-ias-v1';
 const AIS = {
   chatgpt: { name: 'ChatGPT', url: q => `https://chatgpt.com/?q=${encodeURIComponent(q)}` },
   claude: { name: 'Claude', url: q => `https://claude.ai/new?q=${encodeURIComponent(q)}` },
   gemini: { name: 'Gemini', url: () => 'https://gemini.google.com/app' }
 };
-/* La clave de API es un servicio aparte de la suscripción de chat (Plus, Pro…): `looks` filtra lo que claramente
-   no es una clave (por ejemplo, una contraseña) para no enviarlo a ninguna parte. */
-const KEY_AI = {
-  gemini: { name: 'Gemini (Google)', company: 'Google', plan: 'Google AI Pro', billing: 'aistudio.google.com', shape: 'un código largo que se crea en Google AI Studio',
-    looks: k => /^[A-Za-z0-9._-]{30,}$/.test(k), help: 'https://aistudio.google.com/apikey',
-    note: 'Es distinta de Google AI Pro. Tiene un nivel gratis con límites diarios y se crea con tu misma cuenta de Google.' },
-  claude: { name: 'Claude (Anthropic)', company: 'Anthropic', plan: 'Claude Pro', billing: 'console.anthropic.com (Billing)', shape: 'un código largo que empieza con sk-ant-',
-    looks: k => /^sk-ant-[A-Za-z0-9_-]{20,}$/.test(k), help: 'https://console.anthropic.com/settings/keys',
-    note: 'Es distinta de Claude Pro: se paga aparte, por uso, cargando saldo en console.anthropic.com. Un itinerario cuesta unos pocos centavos de dólar.' },
-  openai: { name: 'ChatGPT (OpenAI)', company: 'OpenAI', plan: 'ChatGPT Plus', billing: 'platform.openai.com (Billing)', shape: 'un código largo que empieza con sk-',
-    looks: k => /^sk-[A-Za-z0-9_-]{20,}$/.test(k), help: 'https://platform.openai.com/api-keys',
-    note: 'Es distinta de ChatGPT Plus: se paga aparte, por uso, cargando saldo en platform.openai.com. Un itinerario cuesta unos pocos centavos de dólar.' }
-};
-/* Si la lista de modelos de la clave no trae uno conocido, se usan estos */
-const MODEL_FALLBACK = {
-  gemini: { mejor: 'gemini-flash-latest', economica: 'gemini-flash-lite-latest' },
-  claude: { mejor: 'claude-sonnet-5-5', economica: 'claude-haiku-4-5-20251001' },
-  openai: { mejor: 'gpt-5', economica: 'gpt-5-mini' }
-};
-const IAS = Object.assign({ has: {}, mode: 'app', app: '', keyAI: 'gemini', quality: 'mejor', models: {}, keys: {} },
-  (() => { try { return JSON.parse(localStorage.getItem(IAS_LS)) || {}; } catch { return {}; } })());
-function saveIAS() { try { localStorage.setItem(IAS_LS, JSON.stringify(IAS)); } catch {} }
+const IAS = Object.assign({ has: {}, app: '' }, (() => { try { return JSON.parse(localStorage.getItem(IAS_LS)) || {}; } catch { return {}; } })());
+function saveIAS() { try { localStorage.setItem(IAS_LS, JSON.stringify({ has: IAS.has, app: IAS.app })); } catch {} }
 /* Apps a ofrecer: la última usada primero y luego las que marcó; si no marcó ninguna, las tres */
 function relayApps() {
   const mine = Object.keys(AIS).filter(k => IAS.has[k]), list = mine.length ? mine : Object.keys(AIS);
   return IAS.app && list.includes(IAS.app) ? [IAS.app, ...list.filter(k => k !== IAS.app)] : list;
 }
 function iasStatus() {
-  if (IAS.mode === 'key' && IAS.keys[IAS.keyAI]) return `${KEY_AI[IAS.keyAI].name}, con tu clave de API`;
   const names = relayApps().map(k => AIS[k].name);
   return 'tu app de ' + (names.length <= 1 ? names[0] : names.slice(0, -1).join(', ') + ' o ' + names[names.length - 1]);
 }
 
-/* La clave de IA no se guarda en texto plano: se cifra con una llave AES que el navegador genera como
-   no exportable (esta página puede usarla, pero no leerla ni sacarla del dispositivo). */
-let cipherP = null;
-function cipherKey() {
-  return cipherP || (cipherP = (async () => {
-    let k = await idbStore('ajustes', 'readonly', st => st.get('llave'));
-    if (!k) {
-      k = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
-      await idbStore('ajustes', 'readwrite', st => st.put(k, 'llave'));
-    }
-    return k;
-  })().catch(e => { cipherP = null; throw e; }));
-}
-async function storeApiKey(ai, key) {
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const data = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await cipherKey(), new TextEncoder().encode(key));
-  await idbStore('ajustes', 'readwrite', st => st.put({ iv, data }, 'clave-' + ai));
-}
-async function readApiKey(ai) {
-  const rec = await idbStore('ajustes', 'readonly', st => st.get('clave-' + ai));
-  if (!rec) return '';
-  return new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: rec.iv }, await cipherKey(), rec.data));
-}
-const dropApiKey = ai => idbStore('ajustes', 'readwrite', st => st.delete('clave-' + ai));
-
-/* Llamadas directas a cada IA con la clave del usuario */
-const anthropicHeaders = key => ({ 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' });
-async function apiJSON(r) {
-  let j = null; try { j = await r.json(); } catch {}
-  if (r.ok && j) return j;
-  const msg = JSON.stringify((j && j.error) || j || '').toLowerCase(), s = r.status;
-  const code = s === 401 || s === 403 || (s === 400 && /api[ _-]?key/.test(msg)) ? 'bad_key'
-    : s === 402 || /credit|quota|billing|balance/.test(msg) ? 'no_credit'
-    : s === 404 ? 'model_gone' : s === 413 ? 'prompt_too_large' : s === 429 ? 'rate_limited' : s >= 500 ? 'overloaded' : 'network';
-  throw { code, status: s };
-}
-const verOf = id => Number((String(id).match(/(\d+(?:\.\d+)?)/) || [0, 0])[1]);
-/* Elige el modelo más nuevo que la clave puede usar; así la app no queda atada a nombres que cambian */
-async function pickModel(ai, key, quality, signal) {
-  const q = quality === 'economica' ? 'economica' : 'mejor';
-  if (ai === 'gemini') {
-    const j = await apiJSON(await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000', { signal, headers: { 'x-goog-api-key': key } }));
-    const ids = (j.models || []).filter(m => (m.supportedGenerationMethods || []).includes('generateContent')).map(m => String(m.name).replace(/^models\//, ''));
-    if (ids.includes(MODEL_FALLBACK.gemini[q])) return MODEL_FALLBACK.gemini[q];
-    const re = q === 'mejor' ? /^gemini-\d+(\.\d+)?-flash$/ : /^gemini-\d+(\.\d+)?-flash-lite$/;
-    return ids.filter(i => re.test(i)).sort((a, b) => verOf(b) - verOf(a))[0] || MODEL_FALLBACK.gemini[q];
-  }
-  if (ai === 'claude') {
-    const j = await apiJSON(await fetch('https://api.anthropic.com/v1/models?limit=100', { signal, headers: anthropicHeaders(key) }));
-    const fam = q === 'mejor' ? 'sonnet' : 'haiku';
-    return (j.data || []).map(m => m.id).find(i => i.includes(fam)) || MODEL_FALLBACK.claude[q];   // la lista viene de más nuevo a más viejo
-  }
-  const j = await apiJSON(await fetch('https://api.openai.com/v1/models', { signal, headers: { authorization: 'Bearer ' + key } }));
-  const re = q === 'mejor' ? /^gpt-\d+(\.\d+)?$/ : /^gpt-\d+(\.\d+)?-mini$/;
-  return (j.data || []).map(m => m.id).filter(i => re.test(i)).sort((a, b) => verOf(b) - verOf(a))[0] || MODEL_FALLBACK.openai[q];
-}
-/* `max` solo se usa para la prueba corta al guardar la clave */
-async function callKey(ai, model, key, msgs, signal, max) {
-  const post = (url, headers, body) => fetch(url, { method: 'POST', signal, headers: Object.assign({ 'content-type': 'application/json' }, headers), body: JSON.stringify(body) }).then(apiJSON);
-  if (ai === 'gemini') {
-    const j = await post(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, { 'x-goog-api-key': key },
-      { contents: msgs.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] })), generationConfig: { responseMimeType: 'application/json', maxOutputTokens: max || 16384 } });
-    const c = j.candidates && j.candidates[0];
-    if (!c) throw { code: j.promptFeedback ? 'refused' : 'empty_completion' };
-    if (c.finishReason === 'MAX_TOKENS') throw { code: 'invalid_json' };
-    if (c.finishReason === 'SAFETY') throw { code: 'refused' };
-    return ((c.content && c.content.parts) || []).map(p => p.text || '').join('');
-  }
-  if (ai === 'claude') {
-    const j = await post('https://api.anthropic.com/v1/messages', anthropicHeaders(key), { model, max_tokens: max || 12000, messages: msgs });
-    if (j.stop_reason === 'refusal') throw { code: 'refused' };
-    if (j.stop_reason === 'max_tokens') throw { code: 'invalid_json' };
-    return (j.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
-  }
-  const j = await post('https://api.openai.com/v1/chat/completions', { authorization: 'Bearer ' + key }, Object.assign({ model, messages: msgs }, max ? { max_completion_tokens: max } : {}));
-  const c = j.choices && j.choices[0];
-  if (!c) throw { code: 'empty_completion' };
-  if (c.message && c.message.refusal) throw { code: 'refused' };
-  if (c.finish_reason === 'length') throw { code: 'invalid_json' };
-  return (c.message && c.message.content) || '';
-}
 /* Saca el JSON de una respuesta, venga sola, dentro de un bloque ```json o con texto alrededor */
 function pullJSON(text) {
   const t = String(text || '').replace(/^﻿/, '').trim(), tries = [t];
@@ -2285,27 +2319,8 @@ function pullJSON(text) {
   throw { code: 'invalid_json' };
 }
 /* Reemplaza a sample.json de la versión tienda: mismo contrato (texto o conversación → JSON) */
-async function aiJSON(input, opts = {}) {
-  const msgs = typeof input === 'string' ? [{ role: 'user', content: input }] : input;
-  const ai = IAS.keyAI;
-  if (IAS.mode === 'key' && IAS.keys[ai]) {
-    const key = await readApiKey(ai).catch(() => '');
-    if (key) {
-      try {
-        let model = IAS.models[ai] || MODEL_FALLBACK[ai][IAS.quality] || MODEL_FALLBACK[ai].mejor;
-        try { return pullJSON(await callKey(ai, model, key, msgs, opts.signal)); }
-        catch (e) {
-          if (!(e && e.code === 'model_gone')) throw e;
-          IAS.models[ai] = model = await pickModel(ai, key, IAS.quality, opts.signal); saveIAS();   // el modelo guardado ya no existe
-          return pullJSON(await callKey(ai, model, key, msgs, opts.signal));
-        }
-      } catch (e) {
-        if (e && e.name === 'AbortError') throw { code: 'cancelled' };
-        throw (e && e.code) ? e : { code: 'network' };
-      }
-    }
-  }
-  return relayJSON(msgs, opts.signal);
+function aiJSON(input, opts = {}) {
+  return relayJSON(typeof input === 'string' ? [{ role: 'user', content: input }] : input, opts.signal);
 }
 
 /* Vía "app": el usuario lleva el pedido a su IA y trae la respuesta pegándola */
@@ -2352,75 +2367,27 @@ function relayTry(text) {
 async function copyQuiet(text) { try { await navigator.clipboard.writeText(text); return true; } catch { return false; } }
 function showPrompt() { const d = $('#rl-see'), t = $('#rl-prompt'); if (d) d.open = true; if (t) { t.focus(); t.select(); } }
 
-/* Pantalla "Mis IAs" */
+/* Pantalla "Mis IAs": cuál usa más (va primero) y cuáles más tiene */
 function iasForm() {
-  const html = `<p class="lede" style="margin:0 0 16px">Creando Recuerdos no tiene IA propia ni servidor: usa las IAs que tú ya tienes. Tus datos y tus claves se quedan en este teléfono.</p>
+  const main = AIS[IAS.app] ? IAS.app : '';
+  const html = `<p class="lede" style="margin:0 0 16px">Creando Recuerdos no tiene IA propia ni servidor: usa la IA que tú ya tienes, con tu propia cuenta. Tus datos se quedan en este teléfono.</p>
     <div class="f2">
-      <div class="field full"><span class="flabel">¿Qué IAs tienes?</span><div class="chips">${Object.entries(AIS).map(([k, a]) => `<label class="chip"><input type="checkbox" data-has="${k}" ${IAS.has[k] ? 'checked' : ''}><span>${a.name}</span></label>`).join('')}</div><span class="hint">De pago o gratis, da lo mismo. La app te ofrecerá esas.</span></div>
-      <fieldset class="modes full"><legend class="flabel">¿Cómo quieres que la app las use?</legend>
-        <label class="mode"><input type="radio" name="ia-mode" value="app" ${IAS.mode !== 'key' ? 'checked' : ''}><span><strong>Enviar el pedido a tu app de IA</strong><span class="hint"><strong>Así usas tu suscripción</strong> (ChatGPT Plus, Claude Pro, Google AI Pro…) sin pagar nada extra. La app arma el pedido; tú lo abres en tu IA y pegas la respuesta.</span></span></label>
-        <label class="mode"><input type="radio" name="ia-mode" value="key" ${IAS.mode === 'key' ? 'checked' : ''}><span><strong>Conectar con una clave de API</strong><span class="hint">Automático: la IA responde sola. Pero <strong>no usa tu suscripción</strong>: es un servicio aparte que se paga por uso (Gemini tiene un nivel gratis). Para personas que ya tienen una clave de API.</span></span></label>
-        <div class="mode off" aria-disabled="true"><input type="radio" disabled tabindex="-1"><span><strong>Entrar con ChatGPT</strong> <span class="pill">Pronto</span><span class="hint">Automático y con tu plan Plus o Pro, sin claves. OpenAI todavía no lo abre para apps como esta; lo activaremos cuando lo permita.</span></span></div>
-      </fieldset>
-      <div class="keybox full" id="ia-keybox" hidden>
-        <div class="field"><label for="ia-ai">Con qué IA</label><select id="ia-ai">${Object.entries(KEY_AI).map(([k, a]) => `<option value="${k}" ${IAS.keyAI === k ? 'selected' : ''}>${a.name}</option>`).join('')}</select><span class="hint" id="ia-note"></span></div>
-        <div class="field"><label for="ia-key">Clave de API</label><input id="ia-key" type="password" autocomplete="off" spellcheck="false"><span class="hint"><strong>No es tu contraseña.</strong> Es <span id="ia-shape"></span>. <a id="ia-help" target="_blank" rel="noopener">Cómo crearla</a>. Se guarda cifrada en este teléfono y solo se usa para hablar directo con la IA.</span></div>
-        <div class="field"><label for="ia-q">Calidad</label><select id="ia-q"><option value="mejor" ${IAS.quality !== 'economica' ? 'selected' : ''}>La mejor</option><option value="economica" ${IAS.quality === 'economica' ? 'selected' : ''}>Económica</option></select></div>
-        <div class="row" id="ia-saved"></div>
-      </div>
-      <p class="err full" id="ia-err" hidden></p>
+      <div class="field full"><span class="flabel">¿Qué IA usas más?</span><div class="chips">${Object.entries(AIS).map(([k, a]) => `<label class="chip"><input type="radio" name="ia-main" value="${k}" ${main === k ? 'checked' : ''}><span>${a.name}</span></label>`).join('')}</div><span class="hint">La app te llevará primero a esa.</span></div>
+      <div class="field full"><span class="flabel">¿Tienes otras?</span><div class="chips">${Object.entries(AIS).map(([k, a]) => `<label class="chip"><input type="checkbox" data-has="${k}" ${IAS.has[k] && k !== main ? 'checked' : ''}><span>${a.name}</span></label>`).join('')}</div><span class="hint">De pago o gratis, da lo mismo.</span></div>
+      <div class="keybox full"><strong>Cómo funciona</strong><p class="small">Cuando pidas destinos, un itinerario o ideas, la app arma el pedido con tus datos y lo abre en tu IA, donde ya tienes tu sesión iniciada. Tú copias la respuesta y la pegas de vuelta. Así usas tu suscripción, sin pagar nada extra y sin darle tu contraseña a nadie.</p></div>
     </div>
-    <div class="m-actions"><span class="sp"></span><button type="button" class="btn" data-action="close-modal">Cancelar</button><button type="submit" class="btn primary" id="ia-ok">Guardar</button></div>`;
-  openModal('Mis IAs', html, iasSubmit, f => {
-    const sync = () => {
-      const ai = $('#ia-ai', f).value, a = KEY_AI[ai];
-      $('#ia-keybox', f).hidden = f.querySelector('[name="ia-mode"]:checked').value !== 'key';
-      $('#ia-note', f).textContent = a.note;
-      $('#ia-shape', f).textContent = a.shape;
-      $('#ia-help', f).href = a.help;
-      $('#ia-key', f).placeholder = IAS.keys[ai] ? 'Ya tienes una clave guardada' : 'Pégala aquí';
-      $('#ia-saved', f).innerHTML = IAS.keys[ai] ? `<span class="pill good">Clave guardada</span><button type="button" class="btn small danger" data-action="ia-key-del" data-ai="${ai}">Borrar clave</button>` : '';
-    };
-    f.addEventListener('change', sync); sync();
-  });
-}
-async function iasSubmit(f) {
-  const err = $('#ia-err', f), ok = $('#ia-ok', f);
-  const fail = m => { err.textContent = m; err.hidden = false; ok.disabled = false; ok.textContent = 'Guardar'; };
-  err.hidden = true;
-  const has = {}; f.querySelectorAll('[data-has]').forEach(c => { if (c.checked) has[c.dataset.has] = true; });
-  const mode = f.querySelector('[name="ia-mode"]:checked').value;
-  const ai = $('#ia-ai', f).value, quality = $('#ia-q', f).value, typed = $('#ia-key', f).value.replace(/\s+/g, ''), a = KEY_AI[ai];
-  const useSub = `Para usar tu ${a.plan} sin pagar nada extra, elige "Enviar el pedido a tu app de IA".`;
-  if (mode === 'key') {
-    if (!typed && !IAS.keys[ai]) return fail(`Pega tu clave de API, o elige "Enviar el pedido a tu app de IA" para usar tu suscripción.`);
-    // Lo que no parece una clave (por ejemplo, una contraseña) no se envía a ninguna parte
-    if (typed && !a.looks(typed)) return fail(`Eso no parece una clave de API de ${a.company}: debería ser ${a.shape}. Ojo: no es tu contraseña de ${a.plan}. ${useSub}`);
-    ok.disabled = true; ok.textContent = 'Probando la clave…';
-    try {
-      const k = typed || await readApiKey(ai);
-      let model;
-      try { model = await pickModel(ai, k, quality); }
-      catch (e) { if (e && e.status === 403) model = MODEL_FALLBACK[ai][quality === 'economica' ? 'economica' : 'mejor']; else throw e; }   // clave sin permiso para listar modelos
-      // Prueba corta de verdad: así el aviso de "sin saldo" sale ahora y no a mitad de un itinerario
-      try { await callKey(ai, model, k, [{ role: 'user', content: 'Responde solo: ok' }], undefined, 32); }
-      catch (e) { if (!(e && ['invalid_json', 'empty_completion', 'refused'].includes(e.code))) throw e; }
-      if (typed) await storeApiKey(ai, typed);
-      IAS.keys[ai] = true; IAS.models[ai] = model;
-    } catch (e) {
-      const c = e && e.code;
-      return fail(c === 'bad_key' ? `${a.company} no reconoció esa clave. Revisa que copiaste la clave de API completa (tu contraseña no sirve aquí).`
-        : c === 'no_credit' ? `La clave es correcta, pero tu cuenta de API de ${a.company} no tiene saldo${ai === 'gemini' ? ' o llegó al límite gratis de hoy' : ''}. Ojo: ${a.plan} no incluye saldo de API; se carga aparte en ${a.billing}. ${useSub}`
-        : c === 'rate_limited' ? `${a.company} dice que hay demasiadas consultas seguidas. Espera un minuto y vuelve a intentar.`
-        : 'No pude probar la clave. Revisa tu conexión y vuelve a intentar.');
-    }
-  }
-  Object.assign(IAS, { has, mode, keyAI: ai, quality });
-  saveIAS(); closeModal(); render();
-  toast(mode === 'key' ? `Listo: la IA usará ${a.name} con tu clave de API.` : 'Listo: cuando pidas algo con IA, la app te dará el pedido para tu IA.');
+    <div class="m-actions"><span class="sp"></span><button type="button" class="btn" data-action="close-modal">Cancelar</button><button type="submit" class="btn primary">Guardar</button></div>`;
+  openModal('Mis IAs', html, f => {
+    const main = (f.querySelector('[name="ia-main"]:checked') || {}).value || '';
+    const has = {}; f.querySelectorAll('[data-has]').forEach(c => { if (c.checked) has[c.dataset.has] = true; });
+    if (main) has[main] = true;
+    Object.assign(IAS, { has, app: main });
+    saveIAS(); closeModal(); render();
+    toast(main ? `Listo: la app te llevará primero a ${AIS[main].name}.` : 'Listo.');
+  }, () => {});
 }
 
-/* Respaldo en archivo: datos, fotos y elecciones de "Mis IAs". Las claves de IA no salen del teléfono. */
+/* Respaldo en archivo: datos, fotos y elecciones de "Mis IAs". */
 const blobToDataURL = b => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(r.error); r.readAsDataURL(b); });
 async function backupFile() {
   const fotos = {};
@@ -2428,9 +2395,9 @@ async function backupFile() {
     if (!ph.local || fotos[ph.id]) continue;
     try { const blob = await idbDo('readonly', st => st.get(ph.id)); if (blob) fotos[ph.id] = await blobToDataURL(blob); } catch {}
   }
-  const { has, mode, app, keyAI, quality } = IAS;
+  const { has, app } = IAS;
   const body = { app: 'creando-recuerdos', formato: 1, version: 'local ' + APP_VERSION, fecha: new Date().toISOString(),
-    datos: { profile: state.profile, people: state.people, plans: state.plans }, ias: { has, mode, app, keyAI, quality }, fotos };
+    datos: { profile: state.profile, people: state.people, plans: state.plans }, ias: { has, app }, fotos };
   return new File([JSON.stringify(body)], `creando-recuerdos-copia-${fmtISO(today0())}.json`, { type: 'application/json' });
 }
 async function backupSave(share) {
@@ -2460,13 +2427,9 @@ async function backupLoad(file) {
       try { const blob = await (await fetch(url)).blob(); await idbDo('readwrite', st => st.put(blob, id)); photoURLs.delete(id); } catch {}
     }
     state = { example: false, profile: Object.assign(blankProfile(), d.datos.profile), people: d.datos.people || [], plans: d.datos.plans || [] };
-    if (d.ias) {
-      const x = d.ias, keyAI = KEY_AI[x.keyAI] ? x.keyAI : 'gemini';
-      Object.assign(IAS, { has: x.has || {}, app: AIS[x.app] ? x.app : '', keyAI, quality: x.quality === 'economica' ? 'economica' : 'mejor', mode: x.mode === 'key' && IAS.keys[keyAI] ? 'key' : 'app' });
-      saveIAS();
-    }
-    saveLocal(); render();
-    toast(d.ias && d.ias.mode === 'key' && IAS.mode !== 'key' ? 'Copia recuperada. Vuelve a pegar tu clave de IA en Mis IAs.' : 'Copia recuperada. Todo quedó en este teléfono.');
+    if (d.ias) { Object.assign(IAS, { has: d.ias.has || {}, app: AIS[d.ias.app] ? d.ias.app : '' }); saveIAS(); }
+    saveLocal(); ui.tripForm = null; render();
+    toast('Copia recuperada. Todo quedó en este teléfono.');
   }, () => {});
 }
 
@@ -2489,17 +2452,9 @@ document.addEventListener('click', e => {
     case 'close-modal': closeModal(); break;
     case 'profile': profileForm(); break;
     case 'ias': iasForm(); break;
-    case 'ia-key-del': {
-      if (!b.dataset.armed) { b.dataset.armed = '1'; b.textContent = '¿Seguro? Toca otra vez'; break; }
-      const ai = b.dataset.ai;
-      dropApiKey(ai).catch(() => {}); delete IAS.keys[ai]; delete IAS.models[ai];
-      if (IAS.keyAI === ai) IAS.mode = 'app';
-      saveIAS(); closeModal(); render(); toast('Clave borrada de este teléfono.');
-      break;
-    }
     case 'relay-open': {
       const k = b.dataset.ai, app = AIS[k]; if (!RELAY || !app) break;
-      IAS.app = k; saveIAS();
+      if (!IAS.app) { IAS.app = k; saveIAS(); }   // si no eligió su IA principal, la primera que usa queda primero
       const url = app.url(RELAY.prompt);
       copyQuiet(RELAY.prompt).then(() => window.open(url, '_blank', 'noopener'));
       break;
@@ -2571,6 +2526,23 @@ document.addEventListener('click', e => {
       break;
     }
     case 'run-trip': runTrip(true); break;
+    case 'trip-go': runTrip(false); break;
+    case 'dest-run': runDest(!!b.dataset.fresh); break;
+    case 'dest-close': AI.dest = { status:'idle' }; renderView(); break;
+    case 'stop-dest': AI.dest.ctl && AI.dest.ctl.abort(); break;
+    case 'dest-pick': {
+      const o = AI.dest.list && AI.dest.list[Number(b.dataset.i)]; if (!o) break;
+      ui.tripForm = Object.assign(ui.tripForm || defaultTripForm(), { dest: o.destino });
+      if (o.costo && !num(ui.tripForm.budget)) ui.tripForm.budget = o.costo;
+      runTrip(true); break;
+    }
+    case 'long-dest': {
+      const o = nextLongWeekend(); if (!o) break;
+      const r = o.bridge || o;
+      ui.tripForm = Object.assign(ui.tripForm || defaultTripForm(), { date: fmtISO(r.start), days: clamp(daysBetween(r.start, r.end) + 1, 1, 14), dest: '' });
+      ui.tripLinkId = null; goTab('viajes'); runDest(true); break;
+    }
+    case 'cur-fix': ui.refineText = `Expresa todos los costos en ${b.dataset.c}, convirtiendo con un tipo de cambio actual aproximado.`; runRefine(b.dataset.t, ui.refineText); break;
     case 'trip-again': ui.tripForm = Object.assign(ui.tripForm || defaultTripForm(), clone((currentItin() || {}).itin?.req || {})); runTrip(true); break;
     case 'stop-trip': AI.trip.ctl && AI.trip.ctl.abort(); break;
     case 'save-trip': {
